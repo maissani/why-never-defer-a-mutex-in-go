@@ -11,18 +11,36 @@ import (
 )
 
 /*
+DataStruct représente une structure de données complexe.
+
+@fields:
+  - Identifier: Identifiant unique
+  - Name: Nom de l'élément
+  - IsActive: État actif/inactif
+  - Counter: Compteur d'accès
+  - LastModified: Timestamp de dernière modification
+*/
+type DataStruct struct {
+	Identifier   string    `json:"identifier"`
+	Name         string    `json:"name"`
+	IsActive     bool      `json:"is_active"`
+	Counter      int       `json:"counter"`
+	LastModified time.Time `json:"last_modified"`
+}
+
+/*
 Repository contient les données partagées protégées par un mutex.
 Cette structure simule un état partagé typique dans une application Go.
 
 @fields:
   - mu: Mutex pour protéger l'accès concurrent aux données
   - counter: Compteur global des requêtes traitées
-  - data: Map simulant des données métier partagées
+  - data: Map simulant des données métier partagées avec structure complexe
 */
 type Repository struct {
 	mu      sync.Mutex
 	counter int
-	data    map[string]int
+	data    map[string]*DataStruct
 }
 
 /*
@@ -32,7 +50,7 @@ NewRepository crée et initialise un nouveau repository.
 */
 func NewRepository() *Repository {
 	return &Repository{
-		data: make(map[string]int),
+		data: make(map[string]*DataStruct),
 	}
 }
 
@@ -63,9 +81,15 @@ func (r *Repository) BadHandler(w http.ResponseWriter, req *http.Request) {
 	// Lecture et copie des données
 	r.counter++
 	currentCounter := r.counter
-	dataCopy := make(map[string]int)
+	dataCopy := make(map[string]*DataStruct)
 	for k, v := range r.data {
-		dataCopy[k] = v
+		dataCopy[k] = &DataStruct{
+			Identifier:   v.Identifier,
+			Name:         v.Name,
+			IsActive:     v.IsActive,
+			Counter:      v.Counter,
+			LastModified: v.LastModified,
+		}
 	}
 
 	// Simulation d'un traitement lourd (calcul, appel API, etc.)
@@ -79,7 +103,14 @@ func (r *Repository) BadHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Écriture des résultats
-	r.data[fmt.Sprintf("request_%d", currentCounter)] = result
+	key := fmt.Sprintf("request_%d", currentCounter)
+	r.data[key] = &DataStruct{
+		Identifier:   key,
+		Name:         fmt.Sprintf("Request %d", currentCounter),
+		IsActive:     true,
+		Counter:      result,
+		LastModified: time.Now(),
+	}
 
 	response := map[string]interface{}{
 		"method":   "bad_defer",

@@ -9,9 +9,27 @@ import (
 	"time"
 )
 
+// Couleurs ANSI
 const (
-	badServerURL  = "http://localhost:8081/process"
-	goodServerURL = "http://localhost:8082/process"
+	// Couleurs
+	ColorReset  = "\033[0m"
+	ColorRed    = "\033[31m"
+	ColorGreen  = "\033[32m"
+	ColorYellow = "\033[33m"
+	ColorBlue   = "\033[34m"
+	ColorPurple = "\033[35m"
+	ColorCyan   = "\033[36m"
+	ColorWhite  = "\033[37m"
+	
+	// Styles
+	Bold      = "\033[1m"
+	Underline = "\033[4m"
+)
+
+const (
+	badServerURL     = "http://localhost:8081/process"
+	goodServerURL    = "http://localhost:8082/process"
+	syncmapServerURL = "http://localhost:8083/process"
 )
 
 /*
@@ -130,6 +148,38 @@ func BenchmarkGoodServer_Concurrency100(b *testing.B) {
 }
 
 /*
+BenchmarkSyncMapServer_Concurrency1 teste le serveur "syncmap" avec 1 seule goroutine.
+@expected: Baseline comparable aux autres serveurs
+*/
+func BenchmarkSyncMapServer_Concurrency1(b *testing.B) {
+	benchmarkServer(b, syncmapServerURL, 1)
+}
+
+/*
+BenchmarkSyncMapServer_Concurrency10 teste avec 10 goroutines concurrentes.
+@expected: Bonnes performances sans gestion manuelle de mutex
+*/
+func BenchmarkSyncMapServer_Concurrency10(b *testing.B) {
+	benchmarkServer(b, syncmapServerURL, 10)
+}
+
+/*
+BenchmarkSyncMapServer_Concurrency50 teste avec 50 goroutines concurrentes.
+@expected: sync.Map optimisée pour les lectures concurrentes
+*/
+func BenchmarkSyncMapServer_Concurrency50(b *testing.B) {
+	benchmarkServer(b, syncmapServerURL, 50)
+}
+
+/*
+BenchmarkSyncMapServer_Concurrency100 teste avec 100 goroutines concurrentes.
+@expected: Performance stable avec haute concurrence
+*/
+func BenchmarkSyncMapServer_Concurrency100(b *testing.B) {
+	benchmarkServer(b, syncmapServerURL, 100)
+}
+
+/*
 TestLatencyComparison effectue une comparaison détaillée des latences.
 Génère un tableau comparatif montrant l'amélioration de performance.
 
@@ -145,18 +195,62 @@ func TestLatencyComparison(t *testing.T) {
 	
 	concurrencyLevels := []int{1, 10, 50, 100}
 	
-	fmt.Println("\n=== Comparaison de latence ===")
-	fmt.Println("Concurrency | Bad Server (ms) | Good Server (ms) | Amélioration")
-	fmt.Println("------------|-----------------|------------------|-------------")
+	fmt.Printf("\n%s%s=== 🚀 COMPARAISON DE LATENCE DES 3 SERVEURS ===%s\n", Bold, ColorCyan, ColorReset)
+	fmt.Printf("%s%-12s | %-15s | %-16s | %-17s | %s%s\n", 
+		Bold, "Concurrency", "Bad (defer) ms", "Good (no defer) ms", "SyncMap (no mutex) ms", "Best Improvement", ColorReset)
+	fmt.Println("━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━")
 	
 	for _, concurrency := range concurrencyLevels {
 		badLatency := measureAverageLatency(badServerURL, concurrency, 100)
 		goodLatency := measureAverageLatency(goodServerURL, concurrency, 100)
-		improvement := ((badLatency - goodLatency) / badLatency) * 100
+		syncmapLatency := measureAverageLatency(syncmapServerURL, concurrency, 100)
 		
-		fmt.Printf("%-11d | %-15.2f | %-16.2f | %.1f%%\n", 
-			concurrency, badLatency, goodLatency, improvement)
+		// Calculer les améliorations
+		goodImprovement := ((badLatency - goodLatency) / badLatency) * 100
+		syncmapImprovement := ((badLatency - syncmapLatency) / badLatency) * 100
+		
+		// Colorer les latences selon les valeurs
+		badColor := ColorRed
+		if badLatency < 100 {
+			badColor = ColorYellow
+		}
+		goodColor := ColorGreen
+		if goodLatency > 100 {
+			goodColor = ColorYellow
+		}
+		syncmapColor := ColorPurple
+		if syncmapLatency > 100 {
+			syncmapColor = ColorYellow
+		}
+		
+		// Déterminer la meilleure amélioration
+		bestImprovement := goodImprovement
+		bestServer := "GOOD"
+		if syncmapImprovement > goodImprovement {
+			bestImprovement = syncmapImprovement
+			bestServer = "SYNC.MAP"
+		}
+		
+		// Colorer l'amélioration
+		improvementStr := ""
+		if bestImprovement > 0 {
+			improvementStr = fmt.Sprintf("%s%s+%.1f%% (%s)%s", ColorGreen, Bold, bestImprovement, bestServer, ColorReset)
+		} else {
+			improvementStr = fmt.Sprintf("%s%.1f%%%s", ColorRed, bestImprovement, ColorReset)
+		}
+		
+		fmt.Printf("%s%-12d%s ┃ %s%-15.2f%s ┃ %s%-17.2f%s ┃ %s%-20.2f%s ┃ %s\n", 
+			ColorWhite, concurrency, ColorReset,
+			badColor, badLatency, ColorReset,
+			goodColor, goodLatency, ColorReset,
+			syncmapColor, syncmapLatency, ColorReset,
+			improvementStr)
 	}
+	
+	fmt.Printf("\n%s%sLégende:%s\n", Bold, ColorBlue, ColorReset)
+	fmt.Printf("• %sBad Server%s: Mutex avec defer (bloque pendant tout le traitement)\n", ColorRed, ColorReset)
+	fmt.Printf("• %sGood Server%s: Mutex sans defer (libération immédiate)\n", ColorGreen, ColorReset)
+	fmt.Printf("• %sSyncMap Server%s: sync.Map (pas de mutex manuel)\n", ColorPurple, ColorReset)
 }
 
 /*

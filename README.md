@@ -1,159 +1,160 @@
-# POC - Impact du defer sur les performances des Mutex en Go
+# POC - Impact of `defer` on Mutex Performance in Go
 
-## 🎯 Objectif
+## 🎯 Objective
 
-Ce POC (Proof of Concept) démontre pourquoi l'utilisation de `defer` avec les mutex est une **mauvaise pratique** qui peut drastiquement impacter les performances d'une application Go sous charge concurrente.
+This POC (Proof of Concept) demonstrates why using `defer` with mutexes is a **bad practice** that can drastically impact the performance of a Go application under concurrent load.
 
-## 🚨 Le Problème
+## 🚨 The Problem
 
-Beaucoup de développeurs Go utilisent systématiquement `defer` pour libérer les mutex :
-
-```go
-mu.Lock()
-defer mu.Unlock()  // ❌ MAUVAISE PRATIQUE
-// ... traitement long ...
-```
-
-Cette approche maintient le mutex verrouillé pendant **toute la durée de la fonction**, créant un goulot d'étranglement critique.
-
-## ✅ La Solution
-
-Libérer le mutex immédiatement après les opérations critiques :
+Many Go developers systematically use `defer` to unlock mutexes:
 
 ```go
 mu.Lock()
-// ... opération critique rapide ...
-mu.Unlock()  // ✅ BONNE PRATIQUE
-
-// ... traitement long SANS le mutex ...
+defer mu.Unlock()  // ❌ BAD PRACTICE
+// ... long processing ...
 ```
 
-## 📊 Résultats du Benchmark
+This approach keeps the mutex locked for the **entire duration of the function**, creating a critical bottleneck.
 
-Les tests comparent deux serveurs HTTP identiques, avec la seule différence étant la gestion des mutex :
+## ✅ The Solution
 
-### Latence moyenne par requête
+Unlock the mutex immediately after the critical section:
 
-| Concurrence | Bad Server (defer) | Good Server | **Amélioration** |
-|-------------|-------------------|-------------|------------------|
-| 1 goroutine | 11.12 ms | 11.20 ms | -0.7% |
-| 10 goroutines | **106.97 ms** | 11.89 ms | **88.9%** |
-| 50 goroutines | **419.25 ms** | 13.84 ms | **96.7%** |
-| 100 goroutines | **558.35 ms** | 16.17 ms | **97.1%** |
+```go
+mu.Lock()
+// ... fast critical operation ...
+mu.Unlock()  // ✅ GOOD PRACTICE
 
-### Throughput (requêtes/seconde)
+// ... long processing WITHOUT the mutex ...
+```
 
-- **Bad Server** : ~87-90 req/s (constant, peu importe la concurrence)
-- **Good Server** : 
-  - 1 goroutine : 88 req/s
-  - 10 goroutines : **687 req/s** 
-  - 50 goroutines : 367 req/s
-  - 100 goroutines : 316 req/s
+## 📊 Benchmark Results
 
-## 🔍 Analyse
+The tests compare two identical HTTP servers, with the only difference being how mutexes are handled:
 
-1. **Sans concurrence** (1 goroutine) : Performances identiques, pas de contention
-2. **Avec concurrence** : Le serveur "bad" devient un **goulot d'étranglement** car une seule goroutine peut traiter à la fois
-3. **Impact exponentiel** : Plus la concurrence augmente, plus la dégradation est importante (jusqu'à **97% plus lent**)
+### Average Latency per Request
 
-## 🏗️ Structure du Projet
+| Concurrency | Bad Server (defer) | Good Server | **Improvement** |
+|-------------|--------------------|-------------|------------------|
+| 1 goroutine | 11.12 ms           | 11.20 ms    | -0.7%            |
+| 10 goroutines | **106.97 ms**   | 11.89 ms    | **88.9%**        |
+| 50 goroutines | **419.25 ms**   | 13.84 ms    | **96.7%**        |
+| 100 goroutines | **558.35 ms**  | 16.17 ms    | **97.1%**        |
 
-- `bad_server.go` : Serveur HTTP avec mutex + defer (port 8081)
-- `good_server.go` : Serveur HTTP avec mutex bien utilisés (port 8082)
-- `benchmark_test.go` : Tests de charge comparatifs
-- `run_benchmark.sh` : Script d'automatisation des tests
+### Throughput (requests/second)
 
-## 🚀 Installation et Exécution
+- **Bad Server**: ~87–90 req/s (constant, regardless of concurrency)
+- **Good Server**:
+  - 1 goroutine: 88 req/s
+  - 10 goroutines: **687 req/s**
+  - 50 goroutines: 367 req/s
+  - 100 goroutines: 316 req/s
 
-### Prérequis
-- Go 1.21 ou supérieur
-- Git (pour cloner le projet)
+## 🔍 Analysis
+
+1. **No concurrency** (1 goroutine): Same performance, no contention
+2. **With concurrency**: The "bad" server becomes a **bottleneck**, as only one goroutine can proceed at a time
+3. **Exponential impact**: The higher the concurrency, the worse the degradation (up to **97% slower**)
+
+## 🏗️ Project Structure
+
+- `bad_server.go`: HTTP server using mutex + defer (port 8081)
+- `good_server.go`: HTTP server with optimized mutex usage (port 8082)
+- `benchmark_test.go`: Comparative load tests
+- `run_benchmark.sh`: Benchmark automation script
+
+## 🚀 Installation and Execution
+
+### Prerequisites
+
+- Go 1.21 or higher  
+- Git (to clone the project)
 
 ### Installation
 
-1. Cloner le projet :
+1. Clone the repository:
 ```bash
-git clone <url-du-repo>
+git clone <repo-url>
 cd poc
 ```
 
-2. Installer les dépendances :
+2. Install dependencies:
 ```bash
 go mod download
 go mod tidy
 ```
 
-### Exécution des Benchmarks
+### Running the Benchmarks
 
-#### Méthode 1 : Script automatique (Recommandé)
+#### Method 1: Automatic Script (Recommended)
 
-Le script `run_benchmark.sh` gère automatiquement le démarrage des serveurs et l'exécution des tests :
+The `run_benchmark.sh` script automatically handles server startup and benchmarking:
 
 ```bash
 chmod +x run_benchmark.sh
 ./run_benchmark.sh
 ```
 
-Le script va :
-1. Démarrer les deux serveurs en arrière-plan
-2. Vérifier qu'ils répondent correctement
-3. Lancer les benchmarks pendant 10 secondes par test
-4. Afficher les résultats de latence comparative
-5. Arrêter proprement les serveurs
+The script will:
+1. Start both servers in the background
+2. Check that they respond properly
+3. Run each benchmark for 10 seconds
+4. Display comparative latency results
+5. Gracefully stop the servers
 
-#### Méthode 2 : Exécution manuelle
+#### Method 2: Manual Execution
 
-Si vous préférez contrôler chaque étape :
+If you prefer to control each step:
 
-1. **Terminal 1** - Démarrer le serveur "bad" :
+1. **Terminal 1** – Start the "bad" server:
 ```bash
 go run bad_server.go
-# Le serveur écoute sur http://localhost:8081
+# Server listens on http://localhost:8081
 ```
 
-2. **Terminal 2** - Démarrer le serveur "good" :
+2. **Terminal 2** – Start the "good" server:
 ```bash
 go run good_server.go
-# Le serveur écoute sur http://localhost:8082
+# Server listens on http://localhost:8082
 ```
 
-3. **Terminal 3** - Vérifier que les serveurs fonctionnent :
+3. **Terminal 3** – Verify that servers are running:
 ```bash
-# Tester le serveur "bad"
+# Test the "bad" server
 curl http://localhost:8081/stats
 
-# Tester le serveur "good"
+# Test the "good" server
 curl http://localhost:8082/stats
 ```
 
-4. **Terminal 3** - Lancer les benchmarks :
+4. **Terminal 3** – Run the benchmarks:
 ```bash
-# Benchmarks complets (10 secondes par test)
+# Full benchmarks (10 seconds per test)
 go test -bench=. -benchtime=10s benchmark_test.go
 
-# Version rapide (1 seconde par test)
+# Quick version (1 second per test)
 go test -bench=. -benchtime=1s benchmark_test.go
 
-# Uniquement les tests de latence
+# Latency-only test
 go test -run TestLatencyComparison -v benchmark_test.go
 ```
 
-### Interpréter les Résultats
+### Understanding the Results
 
-Les benchmarks affichent :
-- **ns/op** : Nanosecondes par opération
-- **ms/req** : Millisecondes par requête (plus facile à lire)
-- **req/s** : Requêtes par seconde (throughput)
+The benchmarks output:
+- **ns/op**: Nanoseconds per operation
+- **ms/req**: Milliseconds per request (easier to read)
+- **req/s**: Requests per second (throughput)
 
-Plus la concurrence augmente, plus la différence entre les deux approches devient évidente.
+As concurrency increases, the difference between the two approaches becomes more apparent.
 
-## 💡 Leçons Clés
+## 💡 Key Takeaways
 
-1. **N'utilisez `defer` avec les mutex que pour des opérations très courtes**
-2. **Libérez les mutex dès que possible** pour permettre le parallélisme
-3. **Copiez les données nécessaires** puis libérez le mutex avant le traitement
-4. **L'impact sur les performances peut être catastrophique** (jusqu'à 97% de dégradation)
+1. **Only use `defer` with mutexes for very short operations**
+2. **Release mutexes as soon as possible** to enable parallelism
+3. **Copy required data**, then unlock the mutex before processing
+4. **Performance impact can be catastrophic** (up to 97% degradation)
 
 ## 📝 Conclusion
 
-Ce POC prouve que l'utilisation systématique de `defer` avec les mutex est une anti-pattern qui peut transformer votre application en système mono-thread de facto, annulant tous les bénéfices de la concurrence Go.
+This POC proves that systematically using `defer` with mutexes is an anti-pattern that can effectively turn your application into a single-threaded system, negating all the benefits of Go's concurrency model.
