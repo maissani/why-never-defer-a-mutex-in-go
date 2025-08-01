@@ -1,0 +1,4 @@
+BAD Server (avec defer) starting on :8081
+Endpoints:
+  GET /process - Mauvaise utilisation avec defer
+  GET /stats   - Voir les statistiques

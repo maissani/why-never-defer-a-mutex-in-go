@@ -1,0 +1,4 @@
+GOOD Server (sans defer) starting on :8082
+Endpoints:
+  GET /process - Bonne utilisation sans defer
+  GET /stats   - Voir les statistiques
