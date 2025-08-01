@@ -9,6 +9,23 @@ import (
 	"time"
 )
 
+// Couleurs ANSI
+const (
+	// Couleurs
+	ColorReset  = "\033[0m"
+	ColorRed    = "\033[31m"
+	ColorGreen  = "\033[32m"
+	ColorYellow = "\033[33m"
+	ColorBlue   = "\033[34m"
+	ColorPurple = "\033[35m"
+	ColorCyan   = "\033[36m"
+	ColorWhite  = "\033[37m"
+	
+	// Styles
+	Bold      = "\033[1m"
+	Underline = "\033[4m"
+)
+
 const (
 	badServerURL  = "http://localhost:8081/process"
 	goodServerURL = "http://localhost:8082/process"
@@ -145,17 +162,39 @@ func TestLatencyComparison(t *testing.T) {
 	
 	concurrencyLevels := []int{1, 10, 50, 100}
 	
-	fmt.Println("\n=== Comparaison de latence ===")
-	fmt.Println("Concurrency | Bad Server (ms) | Good Server (ms) | Amélioration")
-	fmt.Println("------------|-----------------|------------------|-------------")
+	fmt.Printf("\n%s%s=== 🚀 COMPARAISON DE LATENCE ===%s\n", Bold, ColorCyan, ColorReset)
+	fmt.Printf("%s%-12s | %-15s | %-16s | %s%s\n", 
+		Bold, "Concurrency", "Bad Server (ms)", "Good Server (ms)", "Amélioration", ColorReset)
+	fmt.Println("━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━")
 	
 	for _, concurrency := range concurrencyLevels {
 		badLatency := measureAverageLatency(badServerURL, concurrency, 100)
 		goodLatency := measureAverageLatency(goodServerURL, concurrency, 100)
 		improvement := ((badLatency - goodLatency) / badLatency) * 100
 		
-		fmt.Printf("%-11d | %-15.2f | %-16.2f | %.1f%%\n", 
-			concurrency, badLatency, goodLatency, improvement)
+		// Colorer les latences selon les valeurs
+		badColor := ColorRed
+		if badLatency < 100 {
+			badColor = ColorYellow
+		}
+		goodColor := ColorGreen
+		if goodLatency > 100 {
+			goodColor = ColorYellow
+		}
+		
+		// Colorer l'amélioration
+		improvementStr := ""
+		if improvement > 0 {
+			improvementStr = fmt.Sprintf("%s%s+%.1f%%%s", ColorGreen, Bold, improvement, ColorReset)
+		} else {
+			improvementStr = fmt.Sprintf("%s%.1f%%%s", ColorRed, improvement, ColorReset)
+		}
+		
+		fmt.Printf("%s%-12d%s ┃ %s%-15.2f%s ┃ %s%-16.2f%s ┃ %s\n", 
+			ColorWhite, concurrency, ColorReset,
+			badColor, badLatency, ColorReset,
+			goodColor, goodLatency, ColorReset,
+			improvementStr)
 	}
 }
 
